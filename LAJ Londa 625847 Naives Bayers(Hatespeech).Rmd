@@ -1,0 +1,219 @@
+---
+title: 'Naives Bayer - Hatespeech - LAJ Londa #625847'
+author: "LAJ Londa"
+date: "10/14/2021"
+output: html_document
+Author: LAJ Londa
+Reviewer: QV Nguyen
+
+toc: true
+toc_depth: 2
+---
+
+Package:
+
+```{r}
+
+library(tidyverse)
+library(googlesheets4)
+library(class)
+library(caret)
+library(wordcloud)
+library(RColorBrewer)
+library(slam)
+library(tm)
+library(ggplot2)
+library(e1071)
+
+```
+
+
+# Business Understanding
+Dataset NB Reddit Hate Speech (https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/NB-reddit-hate-speech.csv)
+
+The advancement of online interaction have shown positive and negative impacts.Although that there is improvement in information sharing, online interaction also facilitates hate-speech or cyber harassment.The negative experiences from hatespeech could have impact on user. To counter hatespeech, Natural Language Processing(NLP) can be utilised.
+
+The data that would be analyse today is comment from reddit that could be classified as hatespeech. This data would evaluated using Naive Bayes (NB) classification. NB classfication will decided which comment is "freespeech"(non-hatespeech) and which comment is a "hate speech"
+
+# Data Understanding
+
+```{r}
+
+url <- "https://raw.githubusercontent.com/HAN-M3DM-Data-Mining/assignments/master/datasets/NB-reddit-hate-speech.csv"
+hate_speechidx <- read_csv(url)
+rawDF <- hate_speechidx[c(2,3)]
+
+```
+
+
+#Cleaning Data
+
+```{r}
+
+head(rawDF)
+
+```
+```{r}
+
+rawDF$hate_speech_idx <- ifelse(rawDF$hate_speech_idx == "n/a", "freespeech", "hatespeech")
+
+```
+
+```{r}
+
+view(rawDF)
+
+```
+
+```{r}
+
+rawDF$hate_speech_idx <- rawDF$hate_speech_idx %>% factor %>% relevel ("hatespeech")
+
+class(rawDF$hate_speech_idx)
+
+```
+
+```{r}
+
+freespeech <- rawDF %>% filter(hate_speech_idx == "freespeech")
+hatespeech <- rawDF %>% filter(hate_speech_idx == "hatespeech")
+wordcloud(freespeech$text, max.words = 20, scale = c(4, 0.8), colors= c("indianred1","indianred2","indianred3","indianred"))
+wordcloud(hatespeech$text, max.words = 20, scale = c(4, 0.8), colors= c("lightsteelblue1","lightsteelblue2","lightsteelblue3","lightsteelblue"))
+
+```
+
+# Data Preparation
+
+```{r}
+
+rawCorpus <- Corpus(VectorSource(rawDF$text))
+inspect(rawCorpus[1:3])
+
+```
+
+```{r}
+
+cleanCorpus <- rawCorpus %>% tm_map(tolower) %>% tm_map(removeNumbers)
+
+```
+```{r}
+
+cleanCorpus <- cleanCorpus %>% tm_map(tolower) %>% tm_map(removeWords, stopwords()) %>% tm_map(removePunctuation)
+
+```
+
+```{r}
+
+cleanCorpus <- cleanCorpus %>% tm_map(stripWhitespace)
+
+```
+
+```{r}
+
+tibble(Raw = rawCorpus$content[1:3], Clean = cleanCorpus$content[1:3])
+
+```
+
+```{r}
+
+cleanDTM <- cleanCorpus %>% DocumentTermMatrix
+inspect(cleanDTM)
+
+```
+
+#Create split indices
+
+```{r}
+
+set.seed(1234)
+trainIndex <- createDataPartition(rawDF$hate_speech_idx, p = .75, 
+                                  list = FALSE, 
+                                  times = 1)
+head(trainIndex)
+
+```
+
+# Apply split indices to DF
+
+```{r}
+
+trainDF <- rawDF[trainIndex, ]
+
+```
+
+```{r}
+
+testDF <- rawDF[-trainIndex, ]
+
+```
+
+# Apply split indices to Corpus
+
+```{r}
+
+trainCorpus <- cleanCorpus[trainIndex]
+testCorpus <- cleanCorpus[-trainIndex]
+
+```
+
+# Apply split indices to DTM
+
+```{r}
+
+trainDTM <- cleanDTM[trainIndex, ]
+testDTM <- cleanDTM[-trainIndex, ]
+
+```
+
+```{r}
+
+freqWords <- trainDTM %>% findFreqTerms(5)
+trainDTM <-  DocumentTermMatrix(trainCorpus, list(dictionary = freqWords))
+testDTM <-  DocumentTermMatrix(testCorpus, list(dictionary = freqWords))
+
+```
+
+```{r}
+
+convert_counts <- function(x) {
+  x <- ifelse(x > 0, 1, 0) %>% factor(levels = c(0,1), labels = c("No", "Yes"))
+}
+
+nColsDTM <- dim(trainDTM)[2]
+trainDTM <- apply(trainDTM, MARGIN = 2, convert_counts)
+testDTM <- apply(testDTM, MARGIN = 2, convert_counts)
+
+head(trainDTM[,1:10])
+
+```
+
+#Modelling NB
+
+```{r}
+
+nbayesModel <-  naiveBayes(trainDTM, trainDF$hate_speech_idx, laplace = 1)
+
+```
+
+```{r}
+
+
+predVec <- predict(nbayesModel, testDTM)
+confusionMatrix(predVec, testDF$hate_speech_idx, positive = "freespeech", dnn = c("Prediction", "True"))
+
+```
+
+
+#Evaluation and Deployment
+
+The model still does not perform well with accuracy of only 65% (0.6475).
+
+The model still have room for improvement and are not completely sufficient to detect and intervene with hate speech due to the accuracy of 65%. It is still not reliable enough with only a little more than half of the prediction is correctly predicted.
+
+This model should still be improved in my personal opinion, as 65% is not a high accuracy. Researcher of this model also acknowledge the issue with accuracy of the model, in which improvement could still be made.
+ 
+#Reference: Reviewer's assessment and recommendation
+Overall the author does every step correctly, from cleaning data to actually running the model. The author actually notices the model's not yet total accuracy and suggests possible areas of improvements.
+Nevertheless, from my perspective, the author can still elaborate more on the model's evaluation, per se about the specificify and sensitivity rates, and its impact on the general model itself. Lastly, I'd suggest the author to only load the necessary packages for each exercise, since an abundance of packages can potentially lead to (1) possible name clashes and (2) loading multiple packages can be time-consuming.
+Overall, this notebook still provides us with a fundamental understanding that the model is not yet sufficient.
+
